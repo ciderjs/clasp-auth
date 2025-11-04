@@ -1,23 +1,20 @@
 {
   "name": "@ciderjs/clasp-auth",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Manage clasp credential data to use GitHub Actions secrets",
-  "main": "dist/cli.cjs",
+  "main": "dist/cli/index.cjs",
   "exports": {
     ".": {
-      "import": "./dist/cli.mjs",
-      "require": "./dist/cli.cjs"
-    },
-    "./action": {
-      "import": "./dist/action.mjs",
-      "require": "./dist/action.cjs"
+      "import": "./dist/cli/index.mjs",
+      "require": "./dist/cli/index.cjs"
     }
   },
   "bin": {
     "clasp-auth": "bin/clasp-auth.js"
   },
   "scripts": {
-    "build": "unbuild",
+    "build:cli": "unbuild --config build.config.cli.ts",
+    "build:action": "unbuild --config build.config.action.ts",
     "check": "biome check",
     "test": "vitest run --coverage"
   },

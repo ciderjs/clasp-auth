@@ -1,10 +1,15 @@
 import { defineBuildConfig } from 'unbuild';
 
 export default defineBuildConfig({
+  entries: [
+    {
+      input: 'src/cli',
+      outDir: 'dist/cli',
+      name: 'cli/index',
+    },
+  ],
   clean: true,
   declaration: false,
-  entries: ['src/cli', 'src/action'],
-  outDir: 'dist',
   rollup: {
     emitCJS: true,
     cjsBridge: true,
