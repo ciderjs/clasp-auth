@@ -8,7 +8,7 @@ const program = new Command();
 program
   .name(pkgJson.name)
   .description(pkgJson.description)
-  .version(pkgJson.version);
+  .version(pkgJson.version, '-v, --version');
 
 program
   .command('upload')

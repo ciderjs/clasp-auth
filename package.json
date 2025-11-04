@@ -1,17 +1,14 @@
 {
   "name": "@ciderjs/clasp-auth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Manage clasp credential data to use GitHub Actions secrets",
   "main": "dist/cli.cjs",
-  "types": "dist/cli.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/cli.d.ts",
       "import": "./dist/cli.mjs",
       "require": "./dist/cli.cjs"
     },
     "./action": {
-      "types": "./dist/action.d.ts",
       "import": "./dist/action.mjs",
       "require": "./dist/action.cjs"
     }
@@ -36,10 +33,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com:luthpg/clasp-auth.git"
+    "url": "git+ssh://git@github.com:ciderjs/clasp-auth.git"
   },
   "bugs": {
-    "url": "https://github.com/luthpg/clasp-auth/issues"
+    "url": "https://github.com/ciderjs/clasp-auth/issues"
   },
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
