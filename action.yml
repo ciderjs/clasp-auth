@@ -15,6 +15,6 @@ runs:
     - name: Restore .clasprc.json
       shell: bash
       run: |
-        echo "$CLASPRC_JSON" > base64 -d > ~/.clasprc.json
+        echo "$CLASPRC_JSON" | base64 -d > ~/.clasprc.json
       env:
         CLASPRC_JSON: ${{ inputs.json }}
