@@ -3,7 +3,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { confirm } from '@inquirer/prompts';
 import { Command } from 'commander';
 import pkgJson from '../package.json';
-import { checkRepoAccess, deleteSecrets, uploadSecrets } from './uploadSecrets';
+import {
+  deleteSecrets,
+  uploadSecrets,
+  validateRepoAccess,
+} from './uploadSecrets';
 import { getClasprcPath } from './utils';
 import { validateClaspConfig } from './validation';
 
@@ -22,14 +26,8 @@ program
     'Upload local ~/.clasprc.json credentials to GitHub Secrets via `gh secret set`',
   )
   .action(async (repo: string, options: { yes?: boolean }) => {
-    const { exists, canPush } = checkRepoAccess(repo);
-
-    if (!exists) {
-      console.error(`❌ リポジトリ "${repo}" は存在しません。`);
-      process.exit(1);
-    }
-    if (!canPush) {
-      console.error(`❌ リポジトリ "${repo}" に対する編集権限がありません。`);
+    const isValid = validateRepoAccess(repo);
+    if (!isValid) {
       process.exit(1);
     }
 
@@ -53,13 +51,8 @@ program
   .option('-y, --yes', 'Skip confirmation prompt')
   .description('Delete clasp-related GitHub Secrets from repository')
   .action(async (repo: string, options: { yes?: boolean }) => {
-    const { exists, canPush } = checkRepoAccess(repo);
-    if (!exists) {
-      console.error(`❌ リポジトリ "${repo}" は存在しません。`);
-      process.exit(1);
-    }
-    if (!canPush) {
-      console.error(`❌ リポジトリ "${repo}" に対する編集権限がありません。`);
+    const isValid = validateRepoAccess(repo);
+    if (!isValid) {
       process.exit(1);
     }
 
@@ -83,6 +76,11 @@ program
   .description('List clasp-related GitHub Secrets')
   .action(async (repo: string) => {
     try {
+      const isValid = validateRepoAccess(repo);
+      if (!isValid) {
+        process.exit(1);
+      }
+
       const output = execSync(`gh secret list -R ${repo} --json name`, {
         encoding: 'utf-8',
       });

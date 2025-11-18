@@ -28,6 +28,19 @@ export function checkRepoAccess(repo: string): {
   }
 }
 
+export function validateRepoAccess(repo: string) {
+  const { exists, canPush } = checkRepoAccess(repo);
+  if (!exists) {
+    console.error(`❌ リポジトリ "${repo}" は存在しません。`);
+    return false;
+  }
+  if (!canPush) {
+    console.error(`❌ リポジトリ "${repo}" に対する編集権限がありません。`);
+    return false;
+  }
+  return true;
+}
+
 export const SECRET_KEY = 'CLASPRC_JSON';
 
 /**
