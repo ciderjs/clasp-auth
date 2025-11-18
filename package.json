@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "unbuild --config",
-    "check": "biome check",
+    "check": "biome check --write",
     "test": "vitest run --coverage"
   },
   "keywords": [

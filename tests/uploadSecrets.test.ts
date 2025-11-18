@@ -46,7 +46,11 @@ describe('uploadSecrets', () => {
 
       const result = checkRepoAccess('owner/repo');
 
-      expect(result).toEqual({ exists: false, canPush: false });
+      expect(result).toEqual({
+        exists: false,
+        canPush: false,
+        error: 'Unknown error',
+      });
     });
   });
 
@@ -180,5 +184,21 @@ describe('uploadSecrets', () => {
         path.join('C:\\Users\\fake', '.clasprc.json'),
       );
     });
+  });
+
+  test('should handle malformed .clasprc.json', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('invalid json{');
+
+    expect(() => uploadSecrets('owner/repo')).toThrow();
+  });
+
+  test('should handle gh CLI not installed', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('gh: command not found');
+    });
+
+    const result = checkRepoAccess('owner/repo');
+    expect(result.exists).toBe(false);
   });
 });

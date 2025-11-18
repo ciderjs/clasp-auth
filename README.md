@@ -117,7 +117,7 @@ Workflow 内で Secret をファイルに復元し、`clasp` が利用できる�
            node-version: 20
  
 +      - name: Setup clasp auth
-+        uses: ciderjs/clasp-auth
++        uses: ciderjs/clasp-auth@v0.1.3
 +        with:
 +          json: {{ secrets.CLASPRC_JSON }}
 
@@ -126,6 +126,28 @@ Workflow 内で Secret をファイルに復元し、`clasp` が利用できる�
 
        - name: Push to GAS
          run: clasp push
+```
+
+---
+
+## 📖 Examples
+
+### プライベートリポジトリで使用
+
+```bash
+# Secrets をアップロード
+clasp-auth upload myorg/private-gas-project
+
+# GitHub Actions で使用
+# (workflow 例を参照)
+```
+
+### 複数プロジェクトの管理
+
+```bash
+# プロジェクトごとに異なるリポジトリにアップロード
+clasp-auth upload myorg/project-a
+clasp-auth upload myorg/project-b
 ```
 
 ---
@@ -154,6 +176,26 @@ clasp-auth upload <owner/repo>
 - Secrets を参照できるジョブを限定するために `permissions` を明示的に設定すること
 - `.clasprc.json` の内容をログに出力しないこと
 - 定期的に `clasp login` をやり直し、Secrets をローテーションすること
+
+---
+
+## 🔧 Troubleshooting
+
+### `gh: command not found`
+
+GitHub CLI がインストールされていません。[こちら](https://cli.github.com/)からインストールしてください。
+
+### `No .clasprc.json found`
+
+`clasp login` を実行して認証情報を生成してください。
+
+### `Permission denied`
+
+`gh auth login` を実行し、適切な権限でログインしてください。
+
+### `Repository not found`
+
+リポジトリ名が正しいか確認してください (形式: `owner/repo`)。
 
 ---
 
