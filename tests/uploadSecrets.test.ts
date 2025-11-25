@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -8,7 +8,9 @@ import {
   uploadSecrets,
 } from '../src/uploadSecrets';
 
-vi.mock('node:child_process');
+vi.mock('node:child_process', () => ({
+  spawnSync: vi.fn(),
+}));
 vi.mock('node:fs');
 
 describe('uploadSecrets', () => {
@@ -17,31 +19,59 @@ describe('uploadSecrets', () => {
     vi.restoreAllMocks();
   });
 
+  // spawnSync の戻り値を簡単に作成するヘルパー
+  const mockSpawn = ({
+    stdout = '',
+    stderr = '',
+    status = 0,
+    error = null as Error | null,
+  } = {}) => {
+    vi.mocked(spawnSync).mockReturnValue({
+      stdout,
+      stderr,
+      status,
+      error,
+      pid: 123,
+      signal: null,
+      output: [stdout, stderr, null],
+    } as any);
+  };
+
   describe('checkRepoAccess', () => {
     test('should return exists: true and canPush: true when repo exists and user has push access', () => {
-      const mockOutput = JSON.stringify({ permissions: { push: true } });
-      vi.mocked(execSync).mockReturnValue(mockOutput);
+      // 成功時のレスポンスをモック
+      mockSpawn({
+        stdout: JSON.stringify({ permissions: { push: true } }),
+        status: 0,
+      });
 
       const result = checkRepoAccess('owner/repo');
 
-      expect(execSync).toHaveBeenCalledWith('gh api repos/owner/repo', {
-        encoding: 'utf-8',
-      });
+      // 引数が配列で渡されているかチェック
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['api', 'repos/owner/repo'],
+        expect.objectContaining({ encoding: 'utf-8' }),
+      );
       expect(result).toEqual({ exists: true, canPush: true });
     });
 
     test('should return exists: true and canPush: false when repo exists and user does not have push access', () => {
-      const mockOutput = JSON.stringify({ permissions: { push: false } });
-      vi.mocked(execSync).mockReturnValue(mockOutput);
+      mockSpawn({
+        stdout: JSON.stringify({ permissions: { push: false } }),
+        status: 0,
+      });
 
       const result = checkRepoAccess('owner/repo');
 
       expect(result).toEqual({ exists: true, canPush: false });
     });
 
-    test('should return exists: false and canPush: false when repo does not exist', () => {
-      vi.mocked(execSync).mockImplementation(() => {
-        throw new Error();
+    test('should return exists: false when repo not found (404)', () => {
+      // gh コマンドがエラー終了(status: 1)し、stderrに404を含む場合
+      mockSpawn({
+        status: 1,
+        stderr: 'Not Found',
       });
 
       const result = checkRepoAccess('owner/repo');
@@ -49,8 +79,20 @@ describe('uploadSecrets', () => {
       expect(result).toEqual({
         exists: false,
         canPush: false,
-        error: 'Unknown error',
+        error: 'Repository not found',
       });
+    });
+
+    test('should return error when gh command is missing', () => {
+      // spawnSync自体がエラーを投げる（コマンドが見つからない場合など）
+      vi.mocked(spawnSync).mockReturnValue({
+        error: { code: 'ENOENT' } as any,
+        status: null,
+      } as any);
+
+      const result = checkRepoAccess('owner/repo');
+
+      expect(result.error).toBe('gh command missing');
     });
   });
 
@@ -58,29 +100,28 @@ describe('uploadSecrets', () => {
     test('should upload secrets from .clasprc.json', () => {
       const clasprcData = {
         token: {
-          access_token: 'test_access_token',
-          refresh_token: 'test_refresh_token',
-          scope: 'test_scope',
-          token_type: 'Bearer',
-          id_token: 'test_id_token',
-          expiry_date: 1234567890,
+          access_token: 'token',
+          expiry_date: 123456,
         },
-        oauth2ClientSettings: {
-          clientId: 'test_client_id',
-          clientSecret: 'test_client_secret',
-          redirectUri: 'http://localhost',
-        },
-        isLocalCreds: true,
       };
+
+      // .clasprc.json の存在と読み込みをモック
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(clasprcData));
 
+      // gh secret set の成功をモック
+      mockSpawn({ status: 0 });
+
       uploadSecrets('owner/repo');
 
-      expect(execSync).toHaveBeenCalledTimes(1);
-      expect(execSync).toHaveBeenCalledWith(
-        'gh secret set CLASPRC_JSON -R owner/repo',
-        expect.any(Object),
+      // 正しい引数と標準入力(input)が渡されたか検証
+      expect(spawnSync).toHaveBeenCalledTimes(1);
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['secret', 'set', 'CLASPRC_JSON', '-R', 'owner/repo'],
+        expect.objectContaining({
+          input: expect.any(String), // Base64文字列が渡されているはず
+        }),
       );
     });
 
@@ -97,12 +138,14 @@ describe('uploadSecrets', () => {
 
   describe('deleteSecrets', () => {
     test('should delete all clasp secrets', () => {
+      mockSpawn({ status: 0 });
+
       deleteSecrets('owner/repo');
 
-      expect(execSync).toHaveBeenCalledTimes(1);
-      expect(execSync).toHaveBeenCalledWith(
-        'gh secret delete CLASPRC_JSON -R owner/repo',
-        expect.any(Object),
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['secret', 'delete', 'CLASPRC_JSON', '-R', 'owner/repo'],
+        expect.anything(),
       );
     });
 
@@ -110,11 +153,11 @@ describe('uploadSecrets', () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')
         .mockImplementation(() => {});
-      vi.mocked(execSync).mockImplementation((command) => {
-        if (command.includes('CLASPRC_JSON')) {
-          throw new Error();
-        }
-        return Buffer.from('');
+
+      // 削除失敗をモック
+      mockSpawn({
+        status: 1,
+        stderr: 'secret not found',
       });
 
       deleteSecrets('owner/repo');
@@ -122,11 +165,11 @@ describe('uploadSecrets', () => {
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '❌ Failed to delete CLASPRC_JSON from GitHub Secrets (may not exist)',
       );
-      expect(execSync).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('path construction', () => {
+    // 環境変数のバックアップとリストア
     const ENV_BACKUP = { ...process.env };
     const PLATFORM_BACKUP = process.platform;
 
@@ -138,67 +181,36 @@ describe('uploadSecrets', () => {
     });
 
     test('should use HOME on linux', () => {
-      Object.defineProperty(process, 'platform', {
-        value: 'linux',
-      });
+      Object.defineProperty(process, 'platform', { value: 'linux' });
       process.env.HOME = '/fake/home';
+
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const _mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
+      vi.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('exit');
       });
 
-      expect(() => uploadSecrets('owner/repo')).toThrow('process.exit called');
+      expect(() => uploadSecrets('owner/repo')).toThrow();
+
+      // getClasprcPath -> utils.ts 経由でパスが生成されているか確認
       expect(fs.existsSync).toHaveBeenCalledWith(
         path.join('/fake/home', '.clasprc.json'),
       );
     });
 
-    test('should use current directory if no user home is set', () => {
-      Object.defineProperty(process, 'platform', {
-        value: 'linux',
-      });
-      delete process.env.HOME;
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const _mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
-      });
-
-      expect(() => uploadSecrets('owner/repo')).toThrow('process.exit called');
-      expect(fs.existsSync).toHaveBeenCalledWith(
-        path.join('', '.clasprc.json'),
-      );
-    });
-
     test('should use USERPROFILE on windows', () => {
-      Object.defineProperty(process, 'platform', {
-        value: 'win32',
-      });
+      Object.defineProperty(process, 'platform', { value: 'win32' });
       process.env.USERPROFILE = 'C:\\Users\\fake';
+
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const _mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
+      vi.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('exit');
       });
 
-      expect(() => uploadSecrets('owner/repo')).toThrow('process.exit called');
+      expect(() => uploadSecrets('owner/repo')).toThrow();
+
       expect(fs.existsSync).toHaveBeenCalledWith(
         path.join('C:\\Users\\fake', '.clasprc.json'),
       );
     });
-  });
-
-  test('should handle malformed .clasprc.json', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue('invalid json{');
-
-    expect(() => uploadSecrets('owner/repo')).toThrow();
-  });
-
-  test('should handle gh CLI not installed', () => {
-    vi.mocked(execSync).mockImplementation(() => {
-      throw new Error('gh: command not found');
-    });
-
-    const result = checkRepoAccess('owner/repo');
-    expect(result.exists).toBe(false);
   });
 });

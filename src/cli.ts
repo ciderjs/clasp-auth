@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { confirm } from '@inquirer/prompts';
 import { Command } from 'commander';
@@ -8,7 +7,7 @@ import {
   uploadSecrets,
   validateRepoAccess,
 } from './uploadSecrets';
-import { getClasprcPath } from './utils';
+import { getClasprcPath, runGhCommand } from './utils';
 import { validateClaspConfig } from './validation';
 
 const program = new Command();
@@ -81,9 +80,15 @@ program
         process.exit(1);
       }
 
-      const output = execSync(`gh secret list -R ${repo} --json name`, {
-        encoding: 'utf-8',
-      });
+      const output = runGhCommand([
+        'secret',
+        'list',
+        '-R',
+        repo,
+        '--json',
+        'name',
+      ]);
+
       const secrets: Array<{ name: string; [key: string]: string }> =
         JSON.parse(output);
       const claspSecrets = secrets.filter((s) => s.name === 'CLASPRC_JSON');
@@ -96,8 +101,9 @@ program
       } else {
         console.log('ℹ️  No clasp secrets found');
       }
-    } catch {
+    } catch (e) {
       console.error('❌ Failed to list secrets');
+      if (process.env.DEBUG) console.error(e);
     }
   });
 
