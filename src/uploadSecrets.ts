@@ -1,6 +1,8 @@
-import { execSync } from 'node:child_process';
+// src/uploadSecrets.ts
+
+// execSync, existsSync, readFileSync の import は削除または整理
 import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import { getClasprcPath, runGhCommand } from './utils'; // 作成した関数をインポート
 
 export function checkRepoAccess(repo: string): {
   exists: boolean;
@@ -9,7 +11,7 @@ export function checkRepoAccess(repo: string): {
 } {
   try {
     // リポジトリ情報を取得
-    const output = execSync(`gh api repos/${repo}`, { encoding: 'utf-8' });
+    const output = runGhCommand(['api', `repos/${repo}`]);
     const data = JSON.parse(output);
 
     // push 権限の有無を確認
@@ -18,13 +20,17 @@ export function checkRepoAccess(repo: string): {
   } catch (error) {
     // エラー理由を判別
     const message = error instanceof Error ? error.message : '';
-    if (message.includes('404')) {
+    if (message.includes('404') || message.includes('Not Found')) {
       return { exists: false, canPush: false, error: 'Repository not found' };
     }
-    if (message.includes('403')) {
+    if (message.includes('403') || message.includes('Permission denied')) {
       return { exists: true, canPush: false, error: 'Permission denied' };
     }
-    return { exists: false, canPush: false, error: 'Unknown error' };
+    // gh コマンド自体がない場合などのハンドリング
+    if (message.includes('not found')) {
+      return { exists: false, canPush: false, error: 'gh command missing' };
+    }
+    return { exists: false, canPush: false, error: message };
   }
 }
 
@@ -47,10 +53,7 @@ export const SECRET_KEY = 'CLASPRC_JSON';
  * ~/.clasprc.json を読み込み、JSON文字列として GitHub Secrets に登録する
  */
 export function uploadSecrets(repo: string) {
-  const clasprcPath = path.join(
-    process.env[process.platform === 'win32' ? 'USERPROFILE' : 'HOME'] || '',
-    '.clasprc.json',
-  );
+  const clasprcPath = getClasprcPath();
 
   if (!existsSync(clasprcPath)) {
     console.error('No .clasprc.json found. Run `clasp login` first.');
@@ -65,15 +68,12 @@ export function uploadSecrets(repo: string) {
   const encoded = Buffer.from(content, 'utf8').toString('base64');
 
   try {
-    // gh CLI を使って Secret に登録
-    execSync(`gh secret set ${SECRET_KEY} -R ${repo}`, {
-      input: encoded,
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
+    runGhCommand(['secret', 'set', SECRET_KEY, '-R', repo], encoded);
 
     console.log(`✅ Uploaded .clasprc.json to GitHub Secrets (CLASPRC_JSON)`);
-  } catch {
+  } catch (e) {
     console.error(`❌ Failed to upload .clasprc.json to GitHub Secrets`);
+    if (e instanceof Error) console.error(e.message);
     process.exit(1);
   }
 }
@@ -83,9 +83,8 @@ export function uploadSecrets(repo: string) {
  */
 export function deleteSecrets(repo: string) {
   try {
-    execSync(`gh secret delete CLASPRC_JSON -R ${repo}`, {
-      stdio: 'inherit',
-    });
+    runGhCommand(['secret', 'delete', SECRET_KEY, '-R', repo]);
+
     console.log(`🗑️ Deleted ${SECRET_KEY} from GitHub Secrets`);
   } catch {
     console.warn(
