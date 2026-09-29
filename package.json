@@ -13,6 +13,7 @@
     "clasp-auth": "bin/clasp-auth.js"
   },
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "build": "unbuild --config",
     "check": "biome check --write",
     "test": "vitest run --coverage"
@@ -42,6 +43,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@types/node": "^26.6.3",
+    "@typescript/typescript6": "^6.0.2",
     "@vitest/coverage-v8": "5.0.2",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
