@@ -26,3 +26,19 @@ export function validateClaspConfig(content: string): boolean {
     return false;
   }
 }
+
+export interface ClaspProjectConfig {
+  scriptId: string;
+  rootDir?: string;
+  projectId?: string;
+  parentId?: string[];
+}
+
+export function validateClaspProjectConfig(content: string): boolean {
+  try {
+    const config = JSON.parse(content) as Partial<ClaspProjectConfig>;
+    return !!config.scriptId;
+  } catch {
+    return false;
+  }
+}

@@ -97,7 +97,48 @@ describe('uploadSecrets', () => {
   });
 
   describe('uploadSecrets', () => {
-    test('should upload secrets from .clasprc.json', () => {
+    test('should upload .clasprc.json and .clasp.json when both exist', () => {
+      const clasprcData = {
+        token: {
+          access_token: 'token',
+          expiry_date: 123456,
+        },
+      };
+      const claspJsonData = {
+        scriptId: 'test-script-id',
+        rootDir: './src',
+      };
+
+      // 両ファイルとも存在する
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(JSON.stringify(clasprcData))
+        .mockReturnValueOnce(JSON.stringify(claspJsonData));
+
+      // gh secret set の成功をモック
+      mockSpawn({ status: 0 });
+
+      uploadSecrets('owner/repo');
+
+      // .clasprc.json と .clasp.json の両方がアップロードされる
+      expect(spawnSync).toHaveBeenCalledTimes(2);
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['secret', 'set', 'CLASPRC_JSON', '-R', 'owner/repo'],
+        expect.objectContaining({
+          input: expect.any(String),
+        }),
+      );
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['secret', 'set', 'CLASP_JSON', '-R', 'owner/repo'],
+        expect.objectContaining({
+          input: expect.any(String),
+        }),
+      );
+    });
+
+    test('should upload only .clasprc.json when .clasp.json does not exist', () => {
       const clasprcData = {
         token: {
           access_token: 'token',
@@ -105,22 +146,23 @@ describe('uploadSecrets', () => {
         },
       };
 
-      // .clasprc.json の存在と読み込みをモック
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      // .clasprc.json は存在するが .clasp.json は存在しない
+      vi.mocked(fs.existsSync)
+        .mockReturnValueOnce(true) // .clasprc.json
+        .mockReturnValueOnce(false); // .clasp.json
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(clasprcData));
 
-      // gh secret set の成功をモック
       mockSpawn({ status: 0 });
 
       uploadSecrets('owner/repo');
 
-      // 正しい引数と標準入力(input)が渡されたか検証
+      // .clasprc.json のみアップロードされる
       expect(spawnSync).toHaveBeenCalledTimes(1);
       expect(spawnSync).toHaveBeenCalledWith(
         'gh',
         ['secret', 'set', 'CLASPRC_JSON', '-R', 'owner/repo'],
         expect.objectContaining({
-          input: expect.any(String), // Base64文字列が渡されているはず
+          input: expect.any(String),
         }),
       );
     });
@@ -134,6 +176,26 @@ describe('uploadSecrets', () => {
       expect(() => uploadSecrets('owner/repo')).toThrow('process.exit called');
       expect(mockExit).toHaveBeenCalledWith(1);
     });
+
+    test('should use custom projectDir for .clasp.json', () => {
+      const clasprcData = { token: { access_token: 'token' } };
+      const claspJsonData = { scriptId: 'custom-id' };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(JSON.stringify(clasprcData))
+        .mockReturnValueOnce(JSON.stringify(claspJsonData));
+
+      mockSpawn({ status: 0 });
+
+      uploadSecrets('owner/repo', { projectDir: '/custom/project' });
+
+      expect(spawnSync).toHaveBeenCalledTimes(2);
+      // .clasp.json のパスが custom projectDir 配下であることを確認
+      expect(fs.existsSync).toHaveBeenCalledWith(
+        path.join('/custom/project', '.clasp.json'),
+      );
+    });
   });
 
   describe('deleteSecrets', () => {
@@ -142,9 +204,16 @@ describe('uploadSecrets', () => {
 
       deleteSecrets('owner/repo');
 
+      // CLASPRC_JSON と CLASP_JSON の両方が削除される
+      expect(spawnSync).toHaveBeenCalledTimes(2);
       expect(spawnSync).toHaveBeenCalledWith(
         'gh',
         ['secret', 'delete', 'CLASPRC_JSON', '-R', 'owner/repo'],
+        expect.anything(),
+      );
+      expect(spawnSync).toHaveBeenCalledWith(
+        'gh',
+        ['secret', 'delete', 'CLASP_JSON', '-R', 'owner/repo'],
         expect.anything(),
       );
     });
@@ -164,6 +233,9 @@ describe('uploadSecrets', () => {
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '❌ Failed to delete CLASPRC_JSON from GitHub Secrets (may not exist)',
+      );
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '❌ Failed to delete CLASP_JSON from GitHub Secrets (may not exist)',
       );
     });
   });

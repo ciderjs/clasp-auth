@@ -1,20 +1,18 @@
 name: "Setup clasp auth"
-description: "Generate .clasprc.json from GitHub Secrets"
+description: "Restore .clasprc.json and .clasp.json from GitHub Secrets, with automatic cleanup"
 author: "ciderjs/luth"
 branding:
   icon: "lock"
   color: "red"
 inputs:
-  json:
-    description: "Uploaded .clasprc.json as Base64-encoded string"
+  clasprc_json:
+    description: "Base64-encoded .clasprc.json content (from CLASPRC_JSON secret)"
     required: true
-    default: "{}"
+  clasp_json:
+    description: "Base64-encoded .clasp.json content (from CLASP_JSON secret). Optional."
+    required: false
+    default: ""
 runs:
-  using: "composite"
-  steps:
-    - name: Restore .clasprc.json
-      shell: bash
-      run: |
-        echo "$CLASPRC_JSON" | base64 -d > ~/.clasprc.json
-      env:
-        CLASPRC_JSON: ${{ inputs.json }}
+  using: "node24"
+  main: "dist/action/main.mjs"
+  post: "dist/action/post.mjs"

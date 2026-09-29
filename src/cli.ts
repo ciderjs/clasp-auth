@@ -3,12 +3,14 @@ import { confirm } from '@inquirer/prompts';
 import { Command } from 'commander';
 import pkgJson from '../package.json';
 import {
+  CLASP_JSON_SECRET_KEY,
   deleteSecrets,
+  SECRET_KEY,
   uploadSecrets,
   validateRepoAccess,
 } from './uploadSecrets';
-import { getClasprcPath, runGhCommand } from './utils';
-import { validateClaspConfig } from './validation';
+import { getClaspJsonPath, getClasprcPath, runGhCommand } from './utils';
+import { validateClaspConfig, validateClaspProjectConfig } from './validation';
 
 const program = new Command();
 
@@ -21,28 +23,34 @@ program
   .command('upload')
   .argument('<repo>', 'GitHub repository (owner/repo)')
   .option('-y, --yes', 'Skip confirmation prompt')
-  .description(
-    'Upload local ~/.clasprc.json credentials to GitHub Secrets via `gh secret set`',
+  .option(
+    '-p, --project-dir <path>',
+    'Path to directory containing .clasp.json (defaults to cwd)',
   )
-  .action(async (repo: string, options: { yes?: boolean }) => {
-    const isValid = validateRepoAccess(repo);
-    if (!isValid) {
-      process.exit(1);
-    }
-
-    if (!options.yes) {
-      const ok = await confirm({
-        message: `対象のリポジトリは "${repo}" です。実行してよいですか？`,
-        default: false,
-      });
-      if (!ok) {
-        console.log('キャンセルしました。');
-        process.exit(0);
+  .description(
+    'Upload local ~/.clasprc.json and .clasp.json credentials to GitHub Secrets via `gh secret set`',
+  )
+  .action(
+    async (repo: string, options: { yes?: boolean; projectDir?: string }) => {
+      const isValid = validateRepoAccess(repo);
+      if (!isValid) {
+        process.exit(1);
       }
-    }
 
-    uploadSecrets(repo);
-  });
+      if (!options.yes) {
+        const ok = await confirm({
+          message: `対象のリポジトリは "${repo}" です。実行してよいですか？`,
+          default: false,
+        });
+        if (!ok) {
+          console.log('キャンセルしました。');
+          process.exit(0);
+        }
+      }
+
+      uploadSecrets(repo, { projectDir: options.projectDir });
+    },
+  );
 
 program
   .command('delete')
@@ -91,7 +99,10 @@ program
 
       const secrets: Array<{ name: string; [key: string]: string }> =
         JSON.parse(output);
-      const claspSecrets = secrets.filter((s) => s.name === 'CLASPRC_JSON');
+      const claspSecretKeys = [SECRET_KEY, CLASP_JSON_SECRET_KEY];
+      const claspSecrets = secrets.filter((s) =>
+        claspSecretKeys.includes(s.name),
+      );
 
       if (claspSecrets.length > 0) {
         console.log('✅ Found clasp secrets:');
@@ -109,8 +120,13 @@ program
 
 program
   .command('verify')
-  .description('Verify local .clasprc.json is valid')
-  .action(() => {
+  .option(
+    '-p, --project-dir <path>',
+    'Path to directory containing .clasp.json (defaults to cwd)',
+  )
+  .description('Verify local .clasprc.json and .clasp.json are valid')
+  .action((options: { projectDir?: string }) => {
+    // .clasprc.json のバリデーション
     const clasprcPath = getClasprcPath();
 
     if (!existsSync(clasprcPath)) {
@@ -118,13 +134,29 @@ program
       process.exit(1);
     }
 
-    const content = readFileSync(clasprcPath, 'utf8');
-    if (!validateClaspConfig(content)) {
+    const clasprcContent = readFileSync(clasprcPath, 'utf8');
+    if (!validateClaspConfig(clasprcContent)) {
       console.error('❌ Invalid .clasprc.json format');
       process.exit(1);
     }
 
     console.log('✅ .clasprc.json is valid');
+
+    // .clasp.json のバリデーション
+    const claspJsonPath = getClaspJsonPath(options.projectDir);
+
+    if (!existsSync(claspJsonPath)) {
+      console.log('ℹ️  No .clasp.json found, skipping validation');
+      return;
+    }
+
+    const claspJsonContent = readFileSync(claspJsonPath, 'utf8');
+    if (!validateClaspProjectConfig(claspJsonContent)) {
+      console.error('❌ Invalid .clasp.json format (scriptId is required)');
+      process.exit(1);
+    }
+
+    console.log('✅ .clasp.json is valid');
   });
 
 program.parse(process.argv);

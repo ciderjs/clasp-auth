@@ -12,6 +12,11 @@ export function getClasprcPath(): string {
   return path.join(homeDir, '.clasprc.json');
 }
 
+export function getClaspJsonPath(projectDir?: string): string {
+  const dir = projectDir || process.cwd();
+  return path.join(dir, '.clasp.json');
+}
+
 export function encodeToBase64(content: string): string {
   return Buffer.from(content, 'utf8').toString('base64');
 }
