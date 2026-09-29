@@ -2,7 +2,7 @@
 
 // execSync, existsSync, readFileSync の import は削除または整理
 import { existsSync, readFileSync } from 'node:fs';
-import { getClasprcPath, runGhCommand } from './utils'; // 作成した関数をインポート
+import { getClaspJsonPath, getClasprcPath, runGhCommand } from './utils'; // 作成した関数をインポート
 
 export function checkRepoAccess(repo: string): {
   exists: boolean;
@@ -48,11 +48,17 @@ export function validateRepoAccess(repo: string) {
 }
 
 export const SECRET_KEY = 'CLASPRC_JSON';
+export const CLASP_JSON_SECRET_KEY = 'CLASP_JSON';
+
+export interface UploadOptions {
+  projectDir?: string | undefined;
+}
 
 /**
  * ~/.clasprc.json を読み込み、JSON文字列として GitHub Secrets に登録する
+ * projectDir が指定されている場合、そのディレクトリの .clasp.json も CLASP_JSON として登録する
  */
-export function uploadSecrets(repo: string) {
+export function uploadSecrets(repo: string, options?: UploadOptions) {
   const clasprcPath = getClasprcPath();
 
   if (!existsSync(clasprcPath)) {
@@ -60,21 +66,50 @@ export function uploadSecrets(repo: string) {
     process.exit(1);
   }
 
+  // .clasprc.json のアップロード
   // 再JSON化することでフラット化
   const content = JSON.stringify(
     JSON.parse(readFileSync(clasprcPath, 'utf8').trim()),
   );
-  // base64 にエンコード
+  // base64 にエンコード
   const encoded = Buffer.from(content, 'utf8').toString('base64');
 
   try {
     runGhCommand(['secret', 'set', SECRET_KEY, '-R', repo], encoded);
 
-    console.log(`✅ Uploaded .clasprc.json to GitHub Secrets (CLASPRC_JSON)`);
+    console.log(`✅ Uploaded .clasprc.json to GitHub Secrets (${SECRET_KEY})`);
   } catch (e) {
-    console.error(`❌ Failed to upload .clasprc.json to GitHub Secrets`);
+    console.error('❌ Failed to upload .clasprc.json to GitHub Secrets');
     if (e instanceof Error) console.error(e.message);
     process.exit(1);
+  }
+
+  // .clasp.json のアップロード
+  const claspJsonPath = getClaspJsonPath(options?.projectDir);
+  if (existsSync(claspJsonPath)) {
+    const claspJsonContent = JSON.stringify(
+      JSON.parse(readFileSync(claspJsonPath, 'utf8').trim()),
+    );
+    const claspJsonEncoded = Buffer.from(claspJsonContent, 'utf8').toString(
+      'base64',
+    );
+
+    try {
+      runGhCommand(
+        ['secret', 'set', CLASP_JSON_SECRET_KEY, '-R', repo],
+        claspJsonEncoded,
+      );
+
+      console.log(
+        `✅ Uploaded .clasp.json to GitHub Secrets (${CLASP_JSON_SECRET_KEY})`,
+      );
+    } catch (e) {
+      console.error('❌ Failed to upload .clasp.json to GitHub Secrets');
+      if (e instanceof Error) console.error(e.message);
+      process.exit(1);
+    }
+  } else {
+    console.log('ℹ️  No .clasp.json found, skipping CLASP_JSON upload');
   }
 }
 
@@ -88,7 +123,17 @@ export function deleteSecrets(repo: string) {
     console.log(`🗑️ Deleted ${SECRET_KEY} from GitHub Secrets`);
   } catch {
     console.warn(
-      '❌ Failed to delete CLASPRC_JSON from GitHub Secrets (may not exist)',
+      `❌ Failed to delete ${SECRET_KEY} from GitHub Secrets (may not exist)`,
+    );
+  }
+
+  try {
+    runGhCommand(['secret', 'delete', CLASP_JSON_SECRET_KEY, '-R', repo]);
+
+    console.log(`🗑️ Deleted ${CLASP_JSON_SECRET_KEY} from GitHub Secrets`);
+  } catch {
+    console.warn(
+      `❌ Failed to delete ${CLASP_JSON_SECRET_KEY} from GitHub Secrets (may not exist)`,
     );
   }
 }

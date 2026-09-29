@@ -6,7 +6,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/luthpg/clasp-auth.svg)](https://github.com/luthpg/clasp-auth/issues)
 
 Google Apps Script (GAS) を GitHub Actions で CI/CD するための **clasp 認証補助ツール**。  
-ローカルで `clasp login` した認証情報を GitHub Secrets にアップロード／削除し、CI/CD 環境で `.clasprc.json` を自動生成します。
+ローカルで `clasp login` した認証情報（`~/.clasprc.json`）とプロジェクト設定（`.clasp.json`）を GitHub Secrets にアップロード／削除し、CI/CD 環境でファイルを自動生成します。
 
 ---
 
@@ -32,13 +32,18 @@ Google Apps Script (GAS) を GitHub Actions で CI/CD するための **clasp �
 ## ✨ Features
 
 - **CLI**
-  - `upload`: ローカルの `~/.clasprc.json` を読み込み、JSON 文字列として GitHub Secrets (`CLASPRC_JSON`) にアップロード
-  - `delete`: 登録済みの Secret (`CLASPRC_JSON`) を削除
+  - `upload`: ローカルの `~/.clasprc.json` を `CLASPRC_JSON` として、カレントディレクトリの `.clasp.json` を `CLASP_JSON` として GitHub Secrets にアップロード
+  - `delete`: 登録済みの Secret（`CLASPRC_JSON`・`CLASP_JSON`）を削除
+  - `list`: 登録済みの clasp 関連 Secret を一覧表示
+  - `verify`: ローカルの `~/.clasprc.json` と `.clasp.json` のフォーマットを検証
   - `--yes` オプションで確認プロンプトをスキップ可能
+  - `--project-dir <path>` オプションで `.clasp.json` の探索ディレクトリを指定可能
   - 実行前に **リポジトリの存在確認** と **編集権限チェック** を自動で行う
 
 - **GitHub Action**
-  - Secrets (`CLASPRC_JSON`) から `.clasprc.json` を生成し、CI/CD 環境で `clasp push` を実行可能にする
+  - Secrets（`CLASPRC_JSON`・`CLASP_JSON`）から各ファイルを復元し、CI/CD 環境で `clasp push` を実行可能にする
+  - ワークフロー終了後の **post アクション**で両ファイルを自動削除（クリーンアップ）
+  - 復元ファイルのパーミッションを `0600` に設定し、同一ランナー上の他プロセスから保護
 
 ---
 
@@ -69,21 +74,28 @@ npm install --save-dev @ciderjs/clasp-auth
 npx @ciderjs/clasp-auth upload <owner/repo>
 ```
 
-例:
+例（カレントディレクトリに `.clasp.json` がある場合、自動的に両方アップロードされます）:
 
 ```bash
 npx @ciderjs/clasp-auth upload ciderjs/city-gas
 ```
 
+`.clasp.json` が別ディレクトリにある場合:
+
+```bash
+npx @ciderjs/clasp-auth upload ciderjs/city-gas --project-dir ./my-project
+```
+
 登録される Secret:
 
-- `CLASPRC_JSON` … `.clasprc.json` の内容を JSON 文字列としてBase64エンコードし保存
+- `CLASPRC_JSON` … `~/.clasprc.json` の内容を JSON 文字列として Base64 エンコードし保存
+- `CLASP_JSON` … `.clasp.json` の内容を JSON 文字列として Base64 エンコードし保存（ファイルが存在する場合のみ）
 
 ---
 
 ### 2. Secrets を削除 (CLI)
 
-登録済みの Secret を削除するには:
+登録済みの Secret（`CLASPRC_JSON` と `CLASP_JSON` の両方）を削除するには:
 
 ```bash
 npx @ciderjs/clasp-auth delete <owner/repo>
@@ -99,7 +111,8 @@ npx @ciderjs/clasp-auth delete <owner/repo> --yes
 
 ### 3. GitHub Actions で利用 (Action)
 
-Workflow 内で Secret をファイルに復元し、`clasp` が利用できるようにします。
+Workflow 内で Secret をファイルに復元し、`clasp` が利用できるようにします。  
+ワークフロー終了後に **post アクションで両ファイルを自動削除**します。
 
 ```diff yaml
  name: Deploy GAS
@@ -115,11 +128,12 @@ Workflow 内で Secret をファイルに復元し、`clasp` が利用できる�
        - uses: actions/setup-node@v4
          with:
            node-version: 20
- 
+
 +      - name: Setup clasp auth
-+        uses: ciderjs/clasp-auth@v0.1.3
++        uses: ciderjs/clasp-auth@v0.3.0
 +        with:
-+          json: {{ secrets.CLASPRC_JSON }}
++          clasprc_json: ${{ secrets.CLASPRC_JSON }}
++          clasp_json: ${{ secrets.CLASP_JSON }}   # optional
 
        - name: Install clasp
          run: npm install -g @google/clasp
@@ -127,6 +141,9 @@ Workflow 内で Secret をファイルに復元し、`clasp` が利用できる�
        - name: Push to GAS
          run: clasp push
 ```
+
+> [!NOTE]
+> 入力名が `json` から `clasprc_json` に変更されました（v0.3.0 以降）。
 
 ---
 
@@ -170,12 +187,13 @@ clasp-auth upload <owner/repo>
 
 ## 🔒 Security Considerations
 
-- Secrets は 1 つ (`CLASPRC_JSON`) のみを利用するため、管理が容易
-- `.clasprc.json` の内部構造変更にも強い
+- Secrets は 2 つ（`CLASPRC_JSON`・`CLASP_JSON`）のみを利用するため、管理が容易
+- `.clasprc.json` / `.clasp.json` の内部構造変更にも強い
 - 公開リポジトリではなくプライベートリポジトリでの利用を推奨
 - Secrets を参照できるジョブを限定するために `permissions` を明示的に設定すること
 - `.clasprc.json` の内容をログに出力しないこと
 - 定期的に `clasp login` をやり直し、Secrets をローテーションすること
+- GitHub Action は復元ファイルを `0600` パーミッションで保護し、ワークフロー終了後に **post アクションで自動削除**
 
 ---
 

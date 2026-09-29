@@ -1,6 +1,6 @@
 {
   "name": "@ciderjs/clasp-auth",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Manage clasp credential data to use GitHub Actions secrets",
   "main": "dist/cli.cjs",
   "exports": {
@@ -37,6 +37,7 @@
   },
   "packageManager": "pnpm@11.25.0",
   "dependencies": {
+    "@actions/core": "^3.0.1",
     "@inquirer/prompts": "^8.7.2",
     "commander": "^15.0.0"
   },
