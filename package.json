@@ -1,6 +1,6 @@
 {
   "name": "@ciderjs/clasp-auth",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Manage clasp credential data to use GitHub Actions secrets",
   "main": "dist/cli.cjs",
   "exports": {
@@ -13,6 +13,7 @@
     "clasp-auth": "bin/clasp-auth.js"
   },
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "build": "unbuild --config",
     "check": "biome check --write",
     "test": "vitest run --coverage"
@@ -29,22 +30,23 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/ciderjs/clasp-auth.git"
+    "url": "https://github.com/ciderjs/clasp-auth"
   },
   "bugs": {
     "url": "https://github.com/ciderjs/clasp-auth/issues"
   },
-  "packageManager": "pnpm@10.18.3",
+  "packageManager": "pnpm@11.25.0",
   "dependencies": {
-    "@inquirer/prompts": "^7.9.0",
-    "commander": "^14.0.2"
+    "@inquirer/prompts": "^8.7.2",
+    "commander": "^15.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.3",
-    "@types/node": "^24.10.0",
-    "@vitest/coverage-v8": "4.0.6",
-    "typescript": "^5.9.3",
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^26.6.3",
+    "@typescript/typescript6": "^6.0.2",
+    "@vitest/coverage-v8": "5.0.2",
+    "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.6"
+    "vitest": "^5.0.2"
   }
 }
